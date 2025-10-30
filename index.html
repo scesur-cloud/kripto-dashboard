@@ -2,8 +2,9 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <title>Kripto Dashboard — Binance WebSocket</title>
+  <title>Kripto Dashboard — Lightweight Charts + Binance WS</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Lightweight Charts CDN -->
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <style>
     :root {
@@ -14,88 +15,290 @@
       --up: #16c784;
       --down: #ea3943;
       --border: #1b2432;
+      --chip: #0f1520;
       --shadow: 0 8px 24px rgba(0,0,0,.35);
     }
-    *{box-sizing:border-box;}
-    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto;}
-    header{padding:16px 20px;background:#0b0f14;position:sticky;top:0;z-index:10;border-bottom:1px solid var(--border);}
-    header h1{margin:0;font-size:18px;}
-    header p{margin:4px 0 0;color:var(--muted);font-size:13px;}
-    .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));padding:14px;}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:12px;display:flex;flex-direction:column;gap:8px;}
-    .row{display:flex;align-items:center;justify-content:space-between;}
-    .left{display:flex;align-items:center;gap:10px;}
-    .logo{width:28px;height:28px;border-radius:50%;background:#0f1520;display:grid;place-items:center;font-weight:bold;font-size:14px;}
-    .name{font-weight:600;}
-    .sub{color:var(--muted);font-size:12px;}
-    .price{font-weight:700;}
-    .chg{padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);}
-    .chg.up{color:var(--up);background:rgba(22,199,132,.08);}
-    .chg.down{color:var(--down);background:rgba(234,57,67,.08);}
-    .chart{width:100%;height:140px;border-radius:8px;overflow:hidden;}
+    * { box-sizing: border-box; }
+    html, body { height: 100%; background: var(--bg); color: var(--text); margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: linear-gradient(180deg, rgba(11,15,20,.85), rgba(11,15,20,.6) 70%, rgba(11,15,20,0));
+      backdrop-filter: blur(6px);
+      padding: 16px 20px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { margin: 0; font-size: 18px; letter-spacing: .2px; }
+    header p  { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+    .grid {
+      display: grid; gap: 14px;
+      grid-template-columns: repeat( auto-fit, minmax(280px, 1fr) );
+      padding: 14px;
+      max-width: 1500px; margin: 0 auto;
+    }
+    .card {
+      background: radial-gradient(1200px 200px at 50% -10%, rgba(255,255,255,.06), rgba(0,0,0,0)) , var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 12px;
+      display: flex; flex-direction: column; gap: 8px;
+      min-height: 220px;
+    }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .left { display: flex; align-items: center; gap: 10px; }
+    .logo {
+      width: 28px; height: 28px; border-radius: 999px;
+      display: grid; place-items: center; font-weight: 700; font-size: 14px;
+      background: var(--chip); border: 1px solid var(--border); color: var(--text);
+    }
+    .name { font-weight: 600; }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .price { font-variant-numeric: tabular-nums; font-weight: 700; }
+    .chg {
+      font-variant-numeric: tabular-nums; font-weight: 600; padding: 2px 8px; border-radius: 999px; font-size: 12px;
+      border: 1px solid var(--border);
+    }
+    .chg.up   { color: var(--up);   background: rgba(22,199,132,.08); }
+    .chg.down { color: var(--down); background: rgba(234,57,67,.08); }
+    .chart { width: 100%; height: 140px; border-radius: 10px; overflow: hidden; }
+    footer {
+      max-width: 1500px; margin: 8px auto 24px; padding: 0 14px; color: var(--muted); font-size: 12px;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; background: var(--muted); margin-right: 6px; }
+    .hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    a { color: #89b4ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-<header>
-  <h1>Kripto Dashboard</h1>
-  <p>Gerçek zamanlı Binance WebSocket verisi — Lightweight Charts</p>
-</header>
-<main class="grid" id="grid"></main>
+  <header>
+    <h1>Kripto Yatırım Dashboard</h1>
+    <p>Gerçek zamanlı (Binance WebSocket) mini paneller — Lightweight Charts ile mum grafikleri</p>
+  </header>
 
-<script>
-const ASSETS=[
- {key:"BTCUSDT",label:"BTC/USDT",icon:"₿"},
- {key:"ETHUSDT",label:"ETH/USDT",icon:"◆"},
- {key:"XRPUSDT",label:"XRP/USDT",icon:"✕"},
- {key:"XLMUSDT",label:"XLM/USDT",icon:"★"},
- {key:"QNTUSDT",label:"QNT/USDT",icon:"Ɋ"},
- {key:"HBARUSDT",label:"HBAR/USDT",icon:"Ḧ"},
- {key:"ALGOUSDT",label:"ALGO/USDT",icon:"Λ"},
- {key:"PAXGUSDT",label:"PAXG/USDT",icon:"◎"},
- {key:"USDTTRY",label:"USD/TRY*",icon:"₺"},
-];
-const grid=document.getElementById("grid");
-const cards={};
-ASSETS.forEach(a=>{
- const card=document.createElement("section");
- card.className="card";
- const top=document.createElement("div");top.className="row";
- const left=document.createElement("div");left.className="left";
- const logo=document.createElement("div");logo.className="logo";logo.textContent=a.icon;
- const names=document.createElement("div");
- const n1=document.createElement("div");n1.className="name";n1.textContent=a.label;
- const n2=document.createElement("div");n2.className="sub";n2.textContent=a.key;
- names.append(n1,n2);left.append(logo,names);
- const right=document.createElement("div");right.style.textAlign="right";
- const price=document.createElement("div");price.className="price";price.textContent="—";
- const chg=document.createElement("div");chg.className="chg";chg.textContent="—";
- right.append(price,chg);top.append(left,right);
- const chartEl=document.createElement("div");chartEl.className="chart";
- card.append(top,chartEl);grid.append(card);
- const chart=LightweightCharts.createChart(chartEl,{layout:{background:{color:"transparent"},textColor:"#ccc"},grid:{vertLines:{color:"#1b2432"},horzLines:{color:"#1b2432"}},timeScale:{timeVisible:true}});
- const candle=chart.addCandlestickSeries({upColor:"#16c784",downColor:"#ea3943",borderVisible:false,wickUpColor:"#16c784",wickDownColor:"#ea3943"});
- cards[a.key]={card,chart,candle,price,chg};
-});
-const fmt=p=>Number(p).toLocaleString("tr-TR",{maximumFractionDigits:p>1?2:6});
-function setChange(el,p){el.classList.remove("up","down");if(p>0)el.classList.add("up");if(p<0)el.classList.add("down");el.textContent=(p>0?"+":"")+p.toFixed(2)+"%";}
-async function init(){
- for(const a of ASSETS){
-  const k=await fetch(`https://api.binance.com/api/v3/klines?symbol=${a.key}&interval=1m&limit=200`).then(r=>r.json());
-  const d=k.map(v=>({time:v[0]/1000,open:+v[1],high:+v[2],low:+v[3],close:+v[4]}));
-  cards[a.key].candle.setData(d);
-  const t=await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${a.key}`).then(r=>r.json());
-  const lp=+t.lastPrice,pc=+t.priceChangePercent;
-  cards[a.key].price.textContent=fmt(lp);setChange(cards[a.key].chg,pc);
- }
- const streams=ASSETS.flatMap(a=>[`${a.key.toLowerCase()}@kline_1m`,`${a.key.toLowerCase()}@ticker`]).join("/");
- const ws=new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
- ws.onmessage=e=>{
-  const m=JSON.parse(e.data),s=m.stream,d=m.data;
-  if(s.includes("@kline")){const c=d.k;cards[d.s]?.candle.update({time:c.t/1000,open:+c.o,high:+c.h,low:+c.l,close:+c.c});cards[d.s].price.textContent=fmt(c.c);}
-  else if(s.includes("@ticker")){const p=+d.c,pc=+d.P;cards[d.s]?.price&&(cards[d.s].price.textContent=fmt(p));setChange(cards[d.s].chg,pc);}
- };
-}
-init();
-</script>
+  <main class="grid" id="grid"></main>
+
+  <footer>
+    <div class="legend">
+      <span><span class="dot"></span>Canlı 1dk mum & 24s ticker</span>
+      <span>•</span>
+      <span>Yeşil = artış, Kırmızı = düşüş</span>
+    </div>
+    <div class="hint">USD/TRY kartı <strong>USDTTRY</strong> akışına göre yaklaşık gösterilir (USDT≈USD varsayımı).</div>
+  </footer>
+
+  <script>
+    // ---- Yapılandırma -------------------------------------------------------
+    const ASSETS = [
+      { key: "BTCUSDT",  label: "BTC/USDT",  icon: "₿"  },
+      { key: "ETHUSDT",  label: "ETH/USDT",  icon: "◆"  },
+      { key: "XRPUSDT",  label: "XRP/USDT",  icon: "✕"  },
+      { key: "XLMUSDT",  label: "XLM/USDT",  icon: "★"  },
+      { key: "QNTUSDT",  label: "QNT/USDT",  icon: "Ɋ"  },
+      { key: "HBARUSDT", label: "HBAR/USDT", icon: "Ḧ"  },
+      { key: "ALGOUSDT", label: "ALGO/USDT", icon: "Λ"  },
+      { key: "PAXGUSDT", label: "PAXG/USDT", icon: "◎"  },
+      // USD/TRY yaklaşık: USDTTRY kullanıyoruz
+      { key: "USDTTRY",  label: "USD/TRY*",  icon: "₺"  },
+    ];
+
+    // Chart tema ve ortak seçenekler
+    const CHART_OPTIONS = {
+      layout: {
+        background: { color: 'transparent' },
+        textColor: '#c7d5e0',
+        fontSize: 11,
+        fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial"
+      },
+      grid: {
+        vertLines: { color: '#1b2432' },
+        horzLines: { color: '#1b2432' },
+      },
+      rightPriceScale: { borderColor: '#1b2432', scaleMargins: { top: 0.1, bottom: 0.15 } },
+      timeScale: { borderColor: '#1b2432', timeVisible: true, secondsVisible: false, fixLeftEdge: false, fixRightEdge: false },
+      crosshair: { mode: 0 },
+      handleScroll: { mouseWheel: true, pressedMouseMove: false, horzTouchDrag: true },
+      handleScale: { axisPressedMouseMove: false, mouseWheel: false, pinch: false },
+      autoSize: true,
+    };
+
+    const KLINE_INTERVAL = '1m';
+    const HISTORY_LIMIT = 200; // İlk yüklemede 200 mum
+
+    const grid = document.getElementById('grid');
+
+    // Her varlık için kart oluştur
+    const cards = {};
+    ASSETS.forEach(asset => {
+      const card = document.createElement('section');
+      card.className = 'card';
+
+      const top = document.createElement('div');
+      top.className = 'row';
+      const left = document.createElement('div'); left.className = 'left';
+      const logo = document.createElement('div'); logo.className = 'logo'; logo.textContent = asset.icon;
+      const nameWrap = document.createElement('div');
+      const name = document.createElement('div'); name.className = 'name'; name.textContent = asset.label;
+      const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = asset.key;
+      nameWrap.appendChild(name); nameWrap.appendChild(sub);
+      left.appendChild(logo); left.appendChild(nameWrap);
+
+      const right = document.createElement('div');
+      const price = document.createElement('div'); price.className = 'price'; price.textContent = '—';
+      const chg = document.createElement('div'); chg.className = 'chg'; chg.textContent = '—';
+      right.style.display = 'grid'; right.style.justifyItems = 'end'; right.style.gap = '4px';
+      right.appendChild(price); right.appendChild(chg);
+
+      top.appendChild(left); top.appendChild(right);
+
+      const chartEl = document.createElement('div');
+      chartEl.className = 'chart';
+
+      card.appendChild(top);
+      card.appendChild(chartEl);
+      grid.appendChild(card);
+
+      // Lightweight Chart kur
+      const chart = LightweightCharts.createChart(chartEl, CHART_OPTIONS);
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: '#16c784', downColor: '#ea3943', borderDownColor: '#ea3943', borderUpColor: '#16c784', wickDownColor: '#ea3943', wickUpColor: '#16c784'
+      });
+      const priceLine = chart.addLineSeries({ lineWidth: 1, lastValueVisible: true, priceLineVisible: true });
+
+      // Resize gözlemcisi
+      new ResizeObserver(() => chart.timeScale().fitContent()).observe(chartEl);
+
+      cards[asset.key] = { card, chart, candleSeries, priceLine, price, chg, chartEl, lastPrice: null };
+    });
+
+    // Yardımcılar
+    const fmtPrice = (p) => {
+      if (p === null || p === undefined || isNaN(p)) return '—';
+      const v = Number(p);
+      if (v >= 1000) return v.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+      if (v >= 1)    return v.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return v.toLocaleString('tr-TR', { minimumFractionDigits: 4, maximumFractionDigits: 8 });
+    };
+    const setChange = (el, perc) => {
+      el.classList.remove('up','down');
+      if (perc > 0) el.classList.add('up'); else if (perc < 0) el.classList.add('down');
+      el.textContent = (perc > 0 ? '+' : '') + perc.toFixed(2) + '%';
+    };
+
+    // İlk veri yükleme (REST) — 1dk mumları ve 24s ticker
+    async function loadInitial() {
+      await Promise.all(ASSETS.map(async ({ key }) => {
+        // 1) Kline geçmişi
+        try {
+          const klRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${key}&interval=${KLINE_INTERVAL}&limit=${HISTORY_LIMIT}`);
+          const kl = await klRes.json();
+          if (!Array.isArray(kl)) throw new Error('Kline yanıtı geçersiz');
+          const data = kl.map(k => ({
+            time: Math.floor(k[0] / 1000),
+            open: parseFloat(k[1]),
+            high: parseFloat(k[2]),
+            low: parseFloat(k[3]),
+            close: parseFloat(k[4]),
+          }));
+          const card = cards[key];
+          card.candleSeries.setData(data);
+          card.priceLine.setData(data.map(d => ({ time: d.time, value: d.close })));
+        } catch (e) {
+          console.warn('Kline yüklenemedi:', key, e);
+        }
+
+        // 2) 24s ticker
+        try {
+          const tRes = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${key}`);
+          const t = await tRes.json();
+          const p = parseFloat(t.lastPrice);
+          const ch = parseFloat(t.priceChangePercent);
+          const card = cards[key];
+          if (!isNaN(p)) { card.price.textContent = fmtPrice(p); card.lastPrice = p; }
+          if (!isNaN(ch)) setChange(card.chg, ch);
+        } catch (e) {
+          console.warn('Ticker yüklenemedi:', key, e);
+        }
+      }));
+    }
+
+    // WebSocket — kline_1m + 24s ticker kombine stream
+    function openSocket() {
+      const streams = [];
+      ASSETS.forEach(({ key }) => {
+        const s = key.toLowerCase();
+        streams.push(`${s}@kline_${KLINE_INTERVAL}`);
+        streams.push(`${s}@ticker`);
+      });
+      const url = `wss://stream.binance.com:9443/stream?streams=${streams.join('/')}`;
+      let ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        console.log('WS bağlandı');
+      };
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          const { stream, data } = msg;
+          if (!stream || !data) return;
+
+          // Kline
+          if (stream.endsWith(`@kline_${KLINE_INTERVAL}`)) {
+            const sym = data.s;
+            const k = data.k;
+            const card = cards[sym];
+            if (!card) return;
+            // Anlık kline güncelle
+            const candle = {
+              time: Math.floor(k.t / 1000),
+              open: parseFloat(k.o),
+              high: parseFloat(k.h),
+              low: parseFloat(k.l),
+              close: parseFloat(k.c),
+            };
+            card.candleSeries.update(candle);
+            card.priceLine.update({ time: candle.time, value: candle.close });
+            // Fiyat etiketi
+            card.price.textContent = fmtPrice(candle.close);
+            card.lastPrice = candle.close;
+          }
+
+          // 24s ticker
+          else if (stream.endsWith('@ticker')) {
+            const sym = data.s;
+            const card = cards[sym];
+            if (!card) return;
+            const lp = parseFloat(data.c);
+            const ch = parseFloat(data.P); // percent
+            if (!isNaN(lp)) {
+              card.price.textContent = fmtPrice(lp);
+              card.lastPrice = lp;
+            }
+            if (!isNaN(ch)) setChange(card.chg, ch);
+          }
+        } catch (e) {
+          console.warn('WS parse hatası', e);
+        }
+      };
+
+      ws.onclose = (e) => {
+        console.warn('WS kapandı, 2sn sonra yeniden bağlanacak...', e.code, e.reason);
+        setTimeout(() => { openSocket(); }, 2000);
+      };
+
+      ws.onerror = (e) => {
+        console.error('WS hata', e);
+        ws.close();
+      };
+    }
+
+    // Başlat
+    (async function init() {
+      await loadInitial();
+      openSocket();
+    })();
+  </script>
 </body>
 </html>
